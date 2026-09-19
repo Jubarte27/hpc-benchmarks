@@ -8,7 +8,7 @@ import sys
 class CompareMonad(object):
 	def checkType(x):
 		if not isinstance(x, CompareMonad):
-			raise TypeError, "Not a CompareMonad instance"
+			raise TypeError("Not a CompareMonad instance")
 	checkType = staticmethod(checkType)
 
 	def run(self, ref_file, out_file):
@@ -92,7 +92,7 @@ class For(CompareMonad):
 
 	def run(self, ref_file, out_file):
 		values = []
-		for i in xrange(self.count):
+		for i in range(self.count):
 			wmonad = self.worker(i)
 			CompareMonad.checkType(wmonad)
 			(ok, value) = wmonad.run(ref_file, out_file)
@@ -109,7 +109,7 @@ class For_(CompareMonad):
 		self.worker = worker
 
 	def run(self, ref_file, out_file):
-		for i in xrange(self.count):
+		for i in range(self.count):
 			wmonad = self.worker(i)
 			CompareMonad.checkType(wmonad)
 			(ok, value) = wmonad.run(ref_file, out_file)
@@ -124,7 +124,7 @@ class Compare(CompareMonad):
 	"""Read an item from both input files and compare it."""
 
 	def __init__(self,
-			read = file.read,
+			read = lambda f: f.read(),
 			equal = lambda x, y: x == y,
 			message = "Output does not match the expected output"):
 		self.read = read
@@ -134,7 +134,7 @@ class Compare(CompareMonad):
 	def run(self, ref_file, out_file):
 		try:
 			x = self.read(ref_file)
-		except ValueError, e:
+		except ValueError as e:
 			sys.stderr.write("Malformed reference file!\n")
 			return (False, None)
 		except EOFError:
@@ -142,7 +142,7 @@ class Compare(CompareMonad):
 			return (False, None)
 		try:
 			y = self.read(out_file)
-		except ValueError, e:
+		except ValueError as e:
 			sys.stderr.write("Malformed output file;\n")
 			sys.stderr.write(str(e))
 			sys.stderr.write('\n')
@@ -160,7 +160,7 @@ class Compare(CompareMonad):
 			return (False, None)
 
 def open_or_abort(filename):
-	try: f = file(filename, "r")
+	try: f = open(filename, "r")
 	except:
 		sys.stderr.write("Cannot open file '" + filename + "'\n")
 		sys.exit(-1)
@@ -185,4 +185,3 @@ def default_main(comparison_routine):
 	else:
 		sys.stdout.write("Mismatch\n")
 		sys.exit(-1)
-

@@ -1,0 +1,6 @@
+[submodule "MW"]
+	path = MW
+	url = https://github.com/mrnorman/miniWeather
+[submodule "PnetCDF"]
+	path = PnetCDF
+	url = https://github.com/Parallel-NetCDF/PnetCDF

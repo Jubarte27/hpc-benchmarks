@@ -2,19 +2,18 @@
 
 import sys
 import os
-from itertools import imap
 
-import globals
-import actions
-import options
-import parboilfile
-import process
-import benchmark
+from . import globals
+from . import actions
+from . import options
+from . import parboilfile
+from . import process
+from . import benchmark
 
 def run():
     # Print a banner message
-    print "Parboil parallel benchmark suite, version 0.2"
-    print
+    print("Parboil parallel benchmark suite, version 0.2")
+    print()
     
     # Global variable setup
     if not globals.root:
@@ -46,4 +45,3 @@ def run():
     # Perform the specified action
     if act:
         return act()
-
