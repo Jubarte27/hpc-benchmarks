@@ -1,3 +1,6 @@
 [submodule "MW"]
 	path = MW
 	url = https://github.com/mrnorman/miniWeather
+[submodule "LAGRAPH"]
+	path = LAGRAPH
+	url = https://github.com/graphblas/lagraph

@@ -3,11 +3,14 @@ set -e
 
 SCRIPT_DIR=$(dirname "$(readlink -e "${BASH_SOURCE[0]}")") && source "$SCRIPT_DIR/util.bash"
 
+GraphBLAS=https://github.com/DrTimothyAldenDavis/GraphBLAS/archive/refs/tags/v10.5.1.zip
+
 main() {
     set_log_depth 0
     ensure update_submodules
     ensure setup_deps
     ensure install_pnetcdf
+    ensure install_graphblas
     ensure setup_venv
     ensure setup_parboil
     ensure setup_nas
@@ -72,6 +75,45 @@ install_pnetcdf() {
     log_info "PnetCDF installed successfully"
 }
 
+install_graphblas() {
+    enter_new_func "Setting up GraphBLAS in .deps"
+    local DEPS_DIR="$PROJECT_DIR/.deps"
+
+    if [ -f "$DEPS_DIR/lib/libgraphblas.so" ] && [ -f "$DEPS_DIR/include/suitesparse/GraphBLAS.h" ]; then
+        log_info "GraphBLAS already built and installed in $DEPS_DIR"
+        return 0
+    fi
+
+    local GRAPHBLAS_SRC_DIR="$DEPS_DIR/src/GraphBLAS-10.5.1"
+    local GRAPHBLAS_ZIP="$DEPS_DIR/src/GraphBLAS-10.5.1.zip"
+    mkdir -p "$DEPS_DIR/src"
+
+    if [ ! -d "$GRAPHBLAS_SRC_DIR" ]; then
+        log_info "Downloading GraphBLAS from $GraphBLAS..."
+        curl -fSL -o "$GRAPHBLAS_ZIP" "$GraphBLAS"
+        log_info "Extracting GraphBLAS archive..."
+        python3 -m zipfile -e "$GRAPHBLAS_ZIP" "$DEPS_DIR/src"
+    fi
+
+    log_info "Compiling and installing GraphBLAS into $DEPS_DIR..."
+    local BUILD_DIR="$GRAPHBLAS_SRC_DIR/build"
+    mkdir -p "$BUILD_DIR"
+    (
+        export PATH="$DEPS_DIR/bin:$PATH"
+        export LD_LIBRARY_PATH="$DEPS_DIR/lib:${LD_LIBRARY_PATH:-}"
+        cd "$BUILD_DIR"
+        cmake -DCMAKE_INSTALL_PREFIX="$DEPS_DIR" \
+              -DCMAKE_C_COMPILER="$DEPS_DIR/bin/gcc" \
+              -DCMAKE_CXX_COMPILER="$DEPS_DIR/bin/g++" \
+              -DSUITESPARSE_USE_FORTRAN=OFF \
+              ..
+        cmake --build . --config Release -j"$(nproc)"
+        cmake --install .
+    )
+    ln -sf suitesparse/GraphBLAS.h "$DEPS_DIR/include/GraphBLAS.h"
+    log_info "GraphBLAS installed successfully"
+}
+
 setup_venv() {
     enter_new_func "Setting up Python virtualenv (.venv)"
     if [ ! -f "$PROJECT_DIR/.venv/bin/python" ]; then
@@ -108,8 +150,10 @@ setup_parboil() {
     fi
 
     # Permissions
-    chmod +x "$PARBOIL_DIR/parboil" 2>/dev/null || true
-    chmod +x "$PARBOIL_DIR/benchmarks"/*/tools/compare-output 2>/dev/null || true
+    if [ -f "$PARBOIL_DIR/parboil" ]; then
+        chmod +x "$PARBOIL_DIR/parboil"
+    fi
+    find "$PARBOIL_DIR/benchmarks" -name "compare-output" -exec chmod +x {} +
 }
 
 setup_nas() {

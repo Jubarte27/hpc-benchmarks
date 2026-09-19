@@ -26,6 +26,7 @@ main() {
     compile_nas
     compile_parboil
     compile_mw
+    compile_lagraph
 }
 
 compile_ja() {
@@ -50,11 +51,11 @@ compile_hpcg() {
 
 compile_rodinia() {
     silent_make RODINIA/openmp/streamcluster
-    make --silent -C RODINIA/openmp/hotspot hotspot
+    make -C RODINIA/openmp/hotspot hotspot
     silent_make RODINIA/data/hotspot/inputGen
     silent_make RODINIA/openmp/hotspot3D
     silent_make RODINIA/openmp/srad
-    make --silent -C RODINIA/openmp/bfs bfs
+    make -C RODINIA/openmp/bfs bfs
 }
 
 compile_nas() {
@@ -62,17 +63,15 @@ compile_nas() {
         cp "$BENCHMARKS_DIR/NAS/config/make.def.template" "$BENCHMARKS_DIR/NAS/config/make.def"
     fi
     mkdir -p "$BENCHMARKS_DIR/NAS/bin"
-    {
-        silent_make NAS BT CLASS=C
-        silent_make NAS CG CLASS=C
-        silent_make NAS FT CLASS=C
-        silent_make NAS IS CLASS=C
-        silent_make NAS LU CLASS=C
-        silent_make NAS MG CLASS=C
-        silent_make NAS EP CLASS=C
-        silent_make NAS SP CLASS=C
-        silent_make NAS UA CLASS=C
-    } > /dev/null
+    silent_make NAS BT CLASS=C
+    silent_make NAS CG CLASS=C
+    silent_make NAS FT CLASS=C
+    silent_make NAS IS CLASS=C
+    silent_make NAS LU CLASS=C
+    silent_make NAS MG CLASS=C
+    silent_make NAS EP CLASS=C
+    silent_make NAS SP CLASS=C
+    silent_make NAS UA CLASS=C
 }
 
 compile_parboil() {
@@ -92,8 +91,23 @@ compile_mw() {
               -DCXXFLAGS="-I$PROJECT_DIR/.deps/include" \
               -DLDFLAGS="-L$PROJECT_DIR/.deps/lib -lpnetcdf" \
               -DOPENMP_FLAGS="-fopenmp" \
-              .. >/dev/null
-        make --silent
+              ..
+        make
+    )
+}
+
+compile_lagraph() {
+    local LAGRAPH_BUILD_DIR="$BENCHMARKS_DIR/LAGRAPH/build"
+    mkdir -p "$LAGRAPH_BUILD_DIR"
+    (
+        cd "$LAGRAPH_BUILD_DIR"
+        cmake -DCMAKE_INSTALL_PREFIX="$PROJECT_DIR/.deps" \
+              -DCMAKE_C_COMPILER="$PROJECT_DIR/.deps/bin/gcc" \
+              -DCMAKE_CXX_COMPILER="$PROJECT_DIR/.deps/bin/g++" \
+              -DGraphBLAS_ROOT="$PROJECT_DIR/.deps" \
+              -DSUITESPARSE_USE_FORTRAN=OFF \
+              ..
+        cmake --build . --config Release -j"$(nproc)"
     )
 }
 
@@ -127,6 +141,9 @@ compile_benchmark() {
         MW)
             compile_mw
             ;;
+        LAGRAPH)
+            compile_lagraph
+            ;;
         *)
             silent_make "$bench"
             ;;
@@ -149,13 +166,42 @@ clean() {
 
     silent_make NAS clean
 
-    (cd "$BENCHMARKS_DIR/PARBOIL" && ./parboil clean stencil omp_base 2>/dev/null || true)
-    (cd "$BENCHMARKS_DIR/MW/c/build" && make --silent clean 2>/dev/null || true)
+    if [ -d "$BENCHMARKS_DIR/PARBOIL" ]; then
+        (cd "$BENCHMARKS_DIR/PARBOIL" && ./parboil clean stencil omp_base)
+    fi
+    clean_submodules
+}
+
+clean_submodules() {
+    # Clean miniWeather (MW) build directories
+    if [ -f "$BENCHMARKS_DIR/MW/c/build/cmake_clean.sh" ]; then
+        (cd "$BENCHMARKS_DIR/MW/c/build" && bash cmake_clean.sh)
+    elif [ -d "$BENCHMARKS_DIR/MW/c/build" ]; then
+        rm -rf "$BENCHMARKS_DIR/MW/c/build"/CMakeCache.txt "$BENCHMARKS_DIR/MW/c/build"/CMakeFiles \
+               "$BENCHMARKS_DIR/MW/c/build"/CTestTestfile.cmake "$BENCHMARKS_DIR/MW/c/build"/Makefile \
+               "$BENCHMARKS_DIR/MW/c/build"/cmake_install.cmake "$BENCHMARKS_DIR/MW/c/build"/Testing \
+               "$BENCHMARKS_DIR/MW/c/build"/mpi* "$BENCHMARKS_DIR/MW/c/build"/open* \
+               "$BENCHMARKS_DIR/MW/c/build"/serial* "$BENCHMARKS_DIR/MW/c/build"/output.nc
+    fi
+
+    if [ -f "$BENCHMARKS_DIR/MW/cpp/build/cmake_clean.sh" ]; then
+        (cd "$BENCHMARKS_DIR/MW/cpp/build" && bash cmake_clean.sh)
+    fi
+
+    # Clean LAGRAPH build directory
+    if [ -d "$BENCHMARKS_DIR/LAGRAPH/build" ]; then
+        rm -rf "$BENCHMARKS_DIR/LAGRAPH/build"/*
+    fi
+
+    # Clean untracked/ignored build artifacts across all git submodules recursively
+    if [ -d "$BENCHMARKS_DIR/.git" ]; then
+        git -C "$BENCHMARKS_DIR" submodule foreach --recursive 'git clean -fdx'
+    fi
 }
 
 clean_make() {
     if [ -d "$1" ]; then
-        make --silent -C "$1" clean 2>/dev/null || true
+        make -C "$1" clean
     fi
 }
 
@@ -169,6 +215,9 @@ _setConfigArgs() {
             ## Options
             -c | --clean)
                 JUSTCLEAN=true
+                ;;
+            -s | --silent)
+                SILENT=true
                 ;;
             ## end of Options
             [!-]*)
@@ -205,5 +254,8 @@ set_env() {
 
 SCRIPT_DIR=$(dirname "$(readlink -e "${BASH_SOURCE[0]}")") && source "$SCRIPT_DIR/util.bash"
 _setConfigArgs "$@"
+if [ "${SILENT:-false}" = "true" ]; then
+    exec >/dev/null 2>&1
+fi
 set_env
 main "$@"

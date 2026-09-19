@@ -3,7 +3,7 @@
 
 SHELL := /usr/bin/env bash
 
-BENCHMARKS := HPCG JA LULESH MW NAS PARBOIL PO RODINIA ST
+BENCHMARKS := HPCG JA LAGRAPH LULESH MW NAS PARBOIL PO RODINIA ST
 
 .PHONY: all init initialize clean distclean help $(BENCHMARKS)
 
@@ -34,7 +34,7 @@ distclean: clean
 # Display help information
 help:
 	@echo "HPC Benchmarks - Available Make Targets:"
-	@echo "  make [all]          Build all 9 benchmark suites (initializes if needed)"
+	@echo "  make [all]          Build all 10 benchmark suites (initializes if needed)"
 	@echo "  make init           Run initialize.sh to download & configure dependencies"
 	@echo "  make <SUITE>        Build a specific benchmark suite:"
 	@echo "                      Available: $(BENCHMARKS)"
