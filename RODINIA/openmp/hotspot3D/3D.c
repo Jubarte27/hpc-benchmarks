@@ -5,6 +5,7 @@
 #include <math.h> 
 #include <sys/time.h>
 #include <string.h>
+#include <omp.h>
 
 #define STR_SIZE (256)
 #define MAX_PD	(3.0e6)
