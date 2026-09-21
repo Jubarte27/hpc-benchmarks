@@ -2,9 +2,6 @@
 set -e
 
 SCRIPT_DIR=$(dirname "$(readlink -e "${BASH_SOURCE[0]}")") && source "$SCRIPT_DIR/util.bash"
-
-GraphBLAS=https://github.com/DrTimothyAldenDavis/GraphBLAS/archive/refs/tags/v10.5.1.zip
-
 main() {
     set_log_depth 0
     ensure update_submodules
@@ -21,7 +18,7 @@ main() {
 update_submodules() {
     enter_new_func "Updating git submodules"
     cd "$PROJECT_DIR"
-    git submodule update --init --recursive
+    git submodule update --init
 }
 
 setup_deps() {
@@ -48,70 +45,230 @@ setup_deps() {
     fi
 }
 
-install_pnetcdf() {
-    enter_new_func "Setting up Parallel-NetCDF (PnetCDF) in .deps"
+#there may be a better way to do this
+find_system_library() {
+    local header_names;
+    local lib_pattern="$2"
+    local env_vars=;
+    local pkg_names; 
+    local config_tool="${5:-}"
     local DEPS_DIR="$PROJECT_DIR/.deps"
+    read -r -a header_names <<< "$1"
+    read -r -a env_vars <<< "$3"
+    read -r -a pkg_names <<< "$4"
 
-    if [ -f "$DEPS_DIR/include/pnetcdf.h" ] && [ -f "$DEPS_DIR/lib/libpnetcdf.a" ]; then
-        log_info "PnetCDF already built and installed in $DEPS_DIR"
+    unset SYSTEM_INC_DIR SYSTEM_LIB_DIR
+
+    _check_dirs() {
+        local inc="$1"
+        local lib="$2"
+        if [ -z "$inc" ] || [ -z "$lib" ] || [ ! -d "$inc" ] || [ ! -d "$lib" ]; then
+            return 1
+        fi
+        if [[ "$inc" == "$DEPS_DIR"* ]] || [[ "$lib" == "$DEPS_DIR"* ]]; then
+            return 1
+        fi
+        local hdr_found=false
+        for h in "${header_names[@]}"; do
+            if [ -f "$inc/$h" ]; then
+                hdr_found=true
+                break
+            fi
+        done
+        if [ "$hdr_found" != "true" ]; then
+            return 1
+        fi
+        if compgen -G "$lib/$lib_pattern" >/dev/null; then
+            SYSTEM_INC_DIR="$inc"
+            SYSTEM_LIB_DIR="$lib"
+            return 0
+        fi
+        return 1
+    }
+
+    # 1. Environment variables
+    for var in "${env_vars[@]}"; do
+        local dir="${!var:-}"
+        if [ -n "$dir" ] && [ -d "$dir" ] && [ "$dir" != "$DEPS_DIR" ]; then
+            for inc_sub in include include/suitesparse ""; do
+                local inc_path="$dir"
+                [ -n "$inc_sub" ] && inc_path="$dir/$inc_sub"
+                for lib_sub in lib lib64 ""; do
+                    local lib_path="$dir"
+                    [ -n "$lib_sub" ] && lib_path="$dir/$lib_sub"
+                    if _check_dirs "$inc_path" "$lib_path"; then
+                        return 0
+                    fi
+                done
+            done
+        fi
+    done
+
+    # 2. Config tool (e.g. pnetcdf-config)
+    if [ -n "$config_tool" ] && command -v "$config_tool" >/dev/null 2>&1; then
+        local cfg_path
+        cfg_path=$(command -v "$config_tool")
+        if [[ "$cfg_path" != "$DEPS_DIR"* ]]; then
+            local inc lib
+            inc=$("$cfg_path" --includedir 2>/dev/null || true)
+            lib=$("$cfg_path" --libdir 2>/dev/null || true)
+            if _check_dirs "$inc" "$lib"; then
+                return 0
+            fi
+        fi
+    fi
+
+    # 3. pkg-config
+    if command -v pkg-config >/dev/null 2>&1; then
+        for pc in "${pkg_names[@]}"; do
+            if pkg-config --exists "$pc" 2>/dev/null; then
+                local inc lib
+                inc=$(pkg-config --variable=includedir "$pc" 2>/dev/null || true)
+                lib=$(pkg-config --variable=libdir "$pc" 2>/dev/null || true)
+                if _check_dirs "$inc" "$lib"; then
+                    return 0
+                fi
+            fi
+        done
+    fi
+
+    # 4. Standard system search paths
+    local standard_incs=(
+        "/usr/include"
+        "/usr/include/suitesparse"
+        "/usr/local/include"
+        "/usr/local/include/suitesparse"
+        "/opt/local/include"
+        "/opt/local/include/suitesparse"
+        "/usr/include/pnetcdf"
+    )
+    local standard_libs=(
+        "/usr/lib"
+        "/usr/lib64"
+        "/usr/lib/x86_64-linux-gnu"
+        "/usr/local/lib"
+        "/usr/local/lib64"
+    )
+
+    for inc in "${standard_incs[@]}"; do
+        for lib in "${standard_libs[@]}"; do
+            if _check_dirs "$inc" "$lib"; then
+                return 0
+            fi
+        done
+    done
+
+    return 1
+}
+
+install_from_system() {
+    local lib_name="$1"
+    local inc_dir="$2"
+    local lib_dir="$3"
+    local lib_pattern="$4"
+    local headers;
+    local pkg_pc="${6:-}"
+    local cmake_name="${7:-}"
+    local DEPS_DIR="$PROJECT_DIR/.deps"
+    read -r -a headers <<< "$5"
+
+    log_info "Found system $lib_name (include: $inc_dir, lib: $lib_dir). Using system $lib_name."
+    mkdir -p "$DEPS_DIR/include" "$DEPS_DIR/lib"
+
+    for hdr in "${headers[@]}"; do
+        if [ -f "$inc_dir/$hdr" ]; then
+            mkdir -p "$(dirname "$DEPS_DIR/include/$hdr")"
+            ln -sf "$inc_dir/$hdr" "$DEPS_DIR/include/$hdr"
+        fi
+    done
+
+    # GraphBLAS compatibility: ensure both include/GraphBLAS.h and include/suitesparse/GraphBLAS.h exist
+    if [ "$lib_name" = "GraphBLAS" ]; then
+        mkdir -p "$DEPS_DIR/include/suitesparse"
+        if [ -f "$inc_dir/GraphBLAS.h" ]; then
+            ln -sf "$inc_dir/GraphBLAS.h" "$DEPS_DIR/include/GraphBLAS.h"
+            ln -sf "$inc_dir/GraphBLAS.h" "$DEPS_DIR/include/suitesparse/GraphBLAS.h"
+        elif [ -f "$inc_dir/suitesparse/GraphBLAS.h" ]; then
+            ln -sf "$inc_dir/suitesparse/GraphBLAS.h" "$DEPS_DIR/include/GraphBLAS.h"
+            ln -sf "$inc_dir/suitesparse/GraphBLAS.h" "$DEPS_DIR/include/suitesparse/GraphBLAS.h"
+        fi
+    fi
+
+    for libfile in "$lib_dir"/$lib_pattern; do
+        if [ -e "$libfile" ]; then
+            ln -sf "$libfile" "$DEPS_DIR/lib/$(basename "$libfile")"
+        fi
+    done
+
+    if [ -n "$pkg_pc" ] && [ -f "$lib_dir/pkgconfig/$pkg_pc.pc" ]; then
+        mkdir -p "$DEPS_DIR/lib/pkgconfig"
+        ln -sf "$lib_dir/pkgconfig/$pkg_pc.pc" "$DEPS_DIR/lib/pkgconfig/$pkg_pc.pc"
+    fi
+
+    if [ -n "$cmake_name" ] && [ -d "$lib_dir/cmake/$cmake_name" ]; then
+        mkdir -p "$DEPS_DIR/lib/cmake"
+        ln -sfn "$lib_dir/cmake/$cmake_name" "$DEPS_DIR/lib/cmake/$cmake_name"
+    fi
+
+    log_info "System $lib_name linked into $DEPS_DIR"
+}
+
+install_from_mamba() {
+    local pkg_name="$1"
+    local check_header="$2"
+    local check_lib_pattern="$3"
+    local DEPS_DIR="$PROJECT_DIR/.deps"
+    local TOOLS_DIR="$PROJECT_DIR/.tools"
+
+    # If the check header is a symlink pointing outside .deps, remove it so mamba installs cleanly
+    if [ -L "$DEPS_DIR/include/$check_header" ]; then
+        local target
+        target=$(readlink -f "$DEPS_DIR/include/$check_header" || true)
+        if [[ "$target" != "$DEPS_DIR"* ]]; then
+            rm -f "$DEPS_DIR/include/$check_header"
+        fi
+    fi
+
+    if [ -f "$DEPS_DIR/include/$check_header" ] && compgen -G "$DEPS_DIR/lib/$check_lib_pattern" >/dev/null; then
+        log_info "$pkg_name already installed in $DEPS_DIR"
         return 0
     fi
 
-    local PNETCDF_SRC_DIR="$DEPS_DIR/src/pnetcdf-1.15.1"
-    if [ ! -d "$PNETCDF_SRC_DIR" ]; then
-        mkdir -p "$DEPS_DIR/src"
-        log_info "Downloading PnetCDF release 1.15.1..."
-        curl -sL https://parallel-netcdf.github.io/Release/pnetcdf-1.15.1.tar.gz | tar -xz -C "$DEPS_DIR/src"
+    log_info "Installing $pkg_name via micromamba into $DEPS_DIR..."
+    local force_flag=()
+    if compgen -G "$DEPS_DIR/conda-meta/${pkg_name}-*.json" >/dev/null; then
+        force_flag=("--force-reinstall")
+    fi
+    "$TOOLS_DIR/bin/micromamba" install "${force_flag[@]}" -y -p "$DEPS_DIR" -c conda-forge "$pkg_name"
+    log_info "$pkg_name installed successfully via micromamba"
+}
+
+install_pnetcdf() {
+    enter_new_func "Setting up PnetCDF in .deps"
+    local maybe_vars="PNETCDF_DIR PNETCDF_ROOT PARALLEL_NETCDF OLCF_PARALLEL_NETCDF_ROOT"
+    local maybe_headers="pnetcdf.h pnetcdf pnetcdf.inc pnetcdf.mod"
+
+    if find_system_library "pnetcdf.h" "libpnetcdf.*" "$maybe_vars" "pnetcdf" "pnetcdf-config"; then
+        install_from_system "PnetCDF" "$SYSTEM_INC_DIR" "$SYSTEM_LIB_DIR" "libpnetcdf.*" "$maybe_headers" "pnetcdf"
+        return 0
     fi
 
-    log_info "Compiling PnetCDF into $DEPS_DIR..."
-    (
-        export PATH="$DEPS_DIR/bin:$PATH"
-        export LD_LIBRARY_PATH="$DEPS_DIR/lib:${LD_LIBRARY_PATH:-}"
-        cd "$PNETCDF_SRC_DIR"
-        ./configure --prefix="$DEPS_DIR" --disable-fortran MPICC="$DEPS_DIR/bin/mpicc" MPICXX="$DEPS_DIR/bin/mpicxx"
-        make -j"$(nproc)" install
-    )
-    log_info "PnetCDF installed successfully"
+    log_info "System PnetCDF not found. Using micromamba..."
+    install_from_mamba "libpnetcdf" "pnetcdf.h" "libpnetcdf.*"
 }
 
 install_graphblas() {
     enter_new_func "Setting up GraphBLAS in .deps"
-    local DEPS_DIR="$PROJECT_DIR/.deps"
+    local maybe_vars="GRAPHBLAS_ROOT GRAPHBLAS_DIR SUITESPARSE_ROOT SUITESPARSE_DIR"
 
-    if [ -f "$DEPS_DIR/lib/libgraphblas.so" ] && [ -f "$DEPS_DIR/include/suitesparse/GraphBLAS.h" ]; then
-        log_info "GraphBLAS already built and installed in $DEPS_DIR"
+    if find_system_library "GraphBLAS.h suitesparse/GraphBLAS.h" "libgraphblas.*" "$maybe_vars" "GraphBLAS graphblas"; then
+        install_from_system "GraphBLAS" "$SYSTEM_INC_DIR" "$SYSTEM_LIB_DIR" "libgraphblas.*" "GraphBLAS.h" "GraphBLAS" "GraphBLAS"
         return 0
     fi
 
-    local GRAPHBLAS_SRC_DIR="$DEPS_DIR/src/GraphBLAS-10.5.1"
-    local GRAPHBLAS_ZIP="$DEPS_DIR/src/GraphBLAS-10.5.1.zip"
-    mkdir -p "$DEPS_DIR/src"
-
-    if [ ! -d "$GRAPHBLAS_SRC_DIR" ]; then
-        log_info "Downloading GraphBLAS from $GraphBLAS..."
-        curl -fSL -o "$GRAPHBLAS_ZIP" "$GraphBLAS"
-        log_info "Extracting GraphBLAS archive..."
-        python3 -m zipfile -e "$GRAPHBLAS_ZIP" "$DEPS_DIR/src"
-    fi
-
-    log_info "Compiling and installing GraphBLAS into $DEPS_DIR..."
-    local BUILD_DIR="$GRAPHBLAS_SRC_DIR/build"
-    mkdir -p "$BUILD_DIR"
-    (
-        export PATH="$DEPS_DIR/bin:$PATH"
-        export LD_LIBRARY_PATH="$DEPS_DIR/lib:${LD_LIBRARY_PATH:-}"
-        cd "$BUILD_DIR"
-        cmake -DCMAKE_INSTALL_PREFIX="$DEPS_DIR" \
-              -DCMAKE_C_COMPILER="$DEPS_DIR/bin/gcc" \
-              -DCMAKE_CXX_COMPILER="$DEPS_DIR/bin/g++" \
-              -DSUITESPARSE_USE_FORTRAN=OFF \
-              ..
-        cmake --build . --config Release -j"$(nproc)"
-        cmake --install .
-    )
-    ln -sf suitesparse/GraphBLAS.h "$DEPS_DIR/include/GraphBLAS.h"
-    log_info "GraphBLAS installed successfully"
+    log_info "System GraphBLAS not found. Using micromamba..."
+    install_from_mamba "graphblas" "GraphBLAS.h" "libgraphblas.*"
+    ln -sf suitesparse/GraphBLAS.h "$PROJECT_DIR/.deps/include/GraphBLAS.h"
 }
 
 setup_venv() {
@@ -128,25 +285,9 @@ setup_parboil() {
     enter_new_func "Configuring PARBOIL benchmark suite"
     local PARBOIL_DIR="$PROJECT_DIR/PARBOIL"
 
-    # Datasets setup
-    if [ ! -d "$PARBOIL_DIR/datasets/stencil" ]; then
-        if [ -f "$PARBOIL_DIR/pb2.5datasets_standard.tgz" ]; then
-            log_info "Extracting Parboil datasets from $PARBOIL_DIR/pb2.5datasets_standard.tgz..."
-            tar -xzf "$PARBOIL_DIR/pb2.5datasets_standard.tgz" -C "$PARBOIL_DIR"
-        elif [ -f "$PROJECT_DIR/pb2.5datasets_standard.tgz" ]; then
-            log_info "Extracting Parboil datasets from $PROJECT_DIR/pb2.5datasets_standard.tgz..."
-            tar -xzf "$PROJECT_DIR/pb2.5datasets_standard.tgz" -C "$PARBOIL_DIR"
-        else
-            log_warn "Parboil dataset archive pb2.5datasets_standard.tgz not found. Datasets may need to be placed in $PARBOIL_DIR/datasets."
-        fi
-    else
-        log_info "Parboil datasets already present in $PARBOIL_DIR/datasets"
-    fi
-
-    # Makefile.conf setup
-    if [ ! -f "$PARBOIL_DIR/common/Makefile.conf" ]; then
-        log_info "Generating $PARBOIL_DIR/common/Makefile.conf..."
-        cp "$PARBOIL_DIR/common/Makefile.conf.example-nvidia" "$PARBOIL_DIR/common/Makefile.conf"
+    if [ ! -d "$PARBOIL_DIR/datasets/spmv" ]; then
+        mkdir -p "$PARBOIL_DIR/datasets"
+        curl -Ls https://github.com/Jubarte27/energyuq-data/raw/refs/heads/main/spmv.tar.gz | tar -xz -C "$PARBOIL_DIR/datasets"
     fi
 
     # Permissions

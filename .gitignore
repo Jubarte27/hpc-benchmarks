@@ -10,3 +10,27 @@ PARBOIL/datasets/
 
 *.x
 *.out
+*.o
+*.mod
+
+JA/omp_ja
+HPCG/HPCCG_BIN
+LULESH/lulesh2.0
+PO/omp_po
+ST/stream
+
+RODINIA/data/hotspot/inputGen/hotspotex
+RODINIA/data/hotspot/inputGen/hotspotver
+RODINIA/openmp/hotspot
+RODINIA/openmp/bfs
+RODINIA/openmp/hotspot3D/3D
+RODINIA/openmp/srad/srad_v1/srad
+RODINIA/openmp/srad/srad_v2/srad
+RODINIA/openmp/streamcluster/sc_cpu
+RODINIA/openmp/streamcluster/sc_omp
+PARBOIL/benchmarks/spmv/build/omp_base_default/spmv
+
+
+NAS/*/npbparams.h
+NAS/*/blk_par.h
+NAS/sys/setparams

@@ -63,22 +63,24 @@ compile_nas() {
         cp "$BENCHMARKS_DIR/NAS/config/make.def.template" "$BENCHMARKS_DIR/NAS/config/make.def"
     fi
     mkdir -p "$BENCHMARKS_DIR/NAS/bin"
-    silent_make NAS BT CLASS=C
-    silent_make NAS CG CLASS=C
-    silent_make NAS FT CLASS=C
-    silent_make NAS IS CLASS=C
-    silent_make NAS LU CLASS=C
-    silent_make NAS MG CLASS=C
-    silent_make NAS EP CLASS=C
-    silent_make NAS SP CLASS=C
-    silent_make NAS UA CLASS=C
+    {
+        silent_make NAS BT CLASS=C
+        silent_make NAS CG CLASS=C
+        silent_make NAS FT CLASS=C
+        silent_make NAS IS CLASS=C
+        silent_make NAS LU CLASS=C
+        silent_make NAS MG CLASS=C
+        silent_make NAS EP CLASS=C
+        silent_make NAS SP CLASS=C
+        silent_make NAS UA CLASS=C
+    } > /dev/null
 }
 
 compile_parboil() {
     if [ ! -f "$BENCHMARKS_DIR/PARBOIL/common/Makefile.conf" ]; then
-        cp "$BENCHMARKS_DIR/PARBOIL/common/Makefile.conf.example-nvidia" "$BENCHMARKS_DIR/PARBOIL/common/Makefile.conf"
+        touch "$BENCHMARKS_DIR/PARBOIL/common/Makefile.conf" # fill me on day
     fi
-    (cd "$BENCHMARKS_DIR/PARBOIL" && ./parboil compile stencil omp_base)
+    (cd "$BENCHMARKS_DIR/PARBOIL" && ./parboil compile spmv omp_base)
 }
 
 compile_mw() {
