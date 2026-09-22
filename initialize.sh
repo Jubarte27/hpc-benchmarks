@@ -7,7 +7,7 @@ main() {
     ensure update_submodules
     ensure setup_deps
     ensure install_pnetcdf
-    ensure install_graphblas
+    ensure ensure_uv
     ensure setup_venv
     ensure setup_parboil
     ensure setup_nas
@@ -257,25 +257,11 @@ install_pnetcdf() {
     install_from_mamba "libpnetcdf" "pnetcdf.h" "libpnetcdf.*"
 }
 
-install_graphblas() {
-    enter_new_func "Setting up GraphBLAS in .deps"
-    local maybe_vars="GRAPHBLAS_ROOT GRAPHBLAS_DIR SUITESPARSE_ROOT SUITESPARSE_DIR"
-
-    if find_system_library "GraphBLAS.h suitesparse/GraphBLAS.h" "libgraphblas.*" "$maybe_vars" "GraphBLAS graphblas"; then
-        install_from_system "GraphBLAS" "$SYSTEM_INC_DIR" "$SYSTEM_LIB_DIR" "libgraphblas.*" "GraphBLAS.h" "GraphBLAS" "GraphBLAS"
-        return 0
-    fi
-
-    log_info "System GraphBLAS not found. Using micromamba..."
-    install_from_mamba "graphblas" "GraphBLAS.h" "libgraphblas.*"
-    ln -sf suitesparse/GraphBLAS.h "$PROJECT_DIR/.deps/include/GraphBLAS.h"
-}
-
 setup_venv() {
     enter_new_func "Setting up Python virtualenv (.venv)"
     if [ ! -f "$PROJECT_DIR/.venv/bin/python" ]; then
-        log_info "Creating Python virtualenv at $PROJECT_DIR/.venv..."
-        python3 -m venv "$PROJECT_DIR/.venv"
+        log_info "Creating Python uv venv at $PROJECT_DIR/.venv..."
+        uv venv --python 3.12 "$PROJECT_DIR/.venv"
     else
         log_info "Python virtualenv already present at $PROJECT_DIR/.venv"
     fi

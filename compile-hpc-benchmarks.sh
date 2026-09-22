@@ -26,7 +26,6 @@ main() {
     compile_nas
     compile_parboil
     compile_mw
-    compile_lagraph
 }
 
 compile_ja() {
@@ -98,20 +97,6 @@ compile_mw() {
     )
 }
 
-compile_lagraph() {
-    local LAGRAPH_BUILD_DIR="$BENCHMARKS_DIR/LAGRAPH/build"
-    mkdir -p "$LAGRAPH_BUILD_DIR"
-    (
-        cd "$LAGRAPH_BUILD_DIR"
-        cmake -DCMAKE_INSTALL_PREFIX="$PROJECT_DIR/.deps" \
-              -DCMAKE_C_COMPILER="$PROJECT_DIR/.deps/bin/gcc" \
-              -DCMAKE_CXX_COMPILER="$PROJECT_DIR/.deps/bin/g++" \
-              -DGraphBLAS_ROOT="$PROJECT_DIR/.deps" \
-              -DSUITESPARSE_USE_FORTRAN=OFF \
-              ..
-        cmake --build . --config Release -j"$(nproc)"
-    )
-}
 
 compile_benchmark() {
     local bench="$1"
@@ -142,9 +127,6 @@ compile_benchmark() {
             ;;
         MW)
             compile_mw
-            ;;
-        LAGRAPH)
-            compile_lagraph
             ;;
         *)
             silent_make "$bench"
@@ -188,11 +170,6 @@ clean_submodules() {
 
     if [ -f "$BENCHMARKS_DIR/MW/cpp/build/cmake_clean.sh" ]; then
         (cd "$BENCHMARKS_DIR/MW/cpp/build" && bash cmake_clean.sh)
-    fi
-
-    # Clean LAGRAPH build directory
-    if [ -d "$BENCHMARKS_DIR/LAGRAPH/build" ]; then
-        rm -rf "$BENCHMARKS_DIR/LAGRAPH/build"/*
     fi
 
     # Clean untracked/ignored build artifacts across all git submodules recursively
@@ -240,7 +217,6 @@ _setConfigArgs() {
 set_env() {
     BENCHMARKS_DIR="$PROJECT_DIR"
 
-    # Prioritize project userspace dependencies (.deps)
     if [ -d "$PROJECT_DIR/.deps/bin" ]; then
         export PATH="$PROJECT_DIR/.deps/bin:$PATH"
     fi
@@ -248,9 +224,9 @@ set_env() {
         export LD_LIBRARY_PATH="$PROJECT_DIR/.deps/lib:${LD_LIBRARY_PATH:-}"
     fi
 
-    # Prioritize project python virtualenv (.venv)
-    if [ -d "$PROJECT_DIR/.venv/bin" ]; then
-        export PATH="$PROJECT_DIR/.venv/bin:$PATH"
+    if [ -f "$PROJECT_DIR/.venv/bin/activate" ]; then
+        # shellcheck disable=SC1091
+        source "$PROJECT_DIR/.venv/bin/activate"
     fi
 }
 
