@@ -34,3 +34,12 @@ PARBOIL/benchmarks/spmv/build/omp_base_default/spmv
 NAS/*/npbparams.h
 NAS/*/blk_par.h
 NAS/sys/setparams
+
+# Working directories and files written by scripts/run/execute-hpc-benchmarks.sh
+HPCG/out
+JA/out
+LULESH/out
+NAS/out
+PO/out
+RODINIA/out
+ST/out

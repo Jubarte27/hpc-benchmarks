@@ -92,6 +92,10 @@ compile_mw() {
               -DCXXFLAGS="-I$PROJECT_DIR/.deps/include" \
               -DLDFLAGS="-L$PROJECT_DIR/.deps/lib -lpnetcdf" \
               -DOPENMP_FLAGS="-fopenmp" \
+              -DOUT_FREQ=100 \
+              -DSIM_TIME=600 \
+              -DNX=400 \
+              -DNZ=200 \
               ..
         make
     )
