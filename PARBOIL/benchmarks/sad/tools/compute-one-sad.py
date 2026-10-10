@@ -1,4 +1,4 @@
-#! /usr/bin/env python3
+#! /usr/bin/env python
 
 # (c) Copyright 2007 The Board of Trustees of the University of Illinois.
 
@@ -9,11 +9,10 @@
 import binaryfilecompare as bfc
 
 class Img:
-    def __init__(self, size, d):
-        w, h = size
+    def __init__(self, (w, h), d):
         self.width = w
-        self.height = h
-        self.data = d
+	self.height = h
+	self.data = d
 
 def load_image(f):
     width = bfc.uint16(f)
@@ -21,8 +20,8 @@ def load_image(f):
     lines = [bfc.many_uint16(width)(f) for n in range(height)]
     return Img((width, height), lines)
 
-frm = load_image(open('input/default/frame.bin', 'rb'))
-ref = load_image(open('input/default/reference.bin', 'rb'))
+frm = load_image(file('input/default/frame.bin'))
+ref = load_image(file('input/default/reference.bin'))
 
 def getpix(img, x, y):
     if x < 0: x = 0
@@ -37,10 +36,10 @@ def pixdif(x, y, xoff, yoff):
 # Compute 4x4 SADs for this search offset in the reference frame
 searchoff = (1,1)
 
-print("Search position: %d" % (searchoff[0] + 16 + 33 * (searchoff[1] + 16)))
+print "Search position: %d" % (searchoff[0] + 16 + 33 * (searchoff[1] + 16))
 
-print([[sum([sum([pixdif(4*bx+x, 4*by+y, searchoff[0], searchoff[1])
+print [[sum([sum([pixdif(4*bx+x, 4*by+y, searchoff[0], searchoff[1])
                   for x in range(4)])
              for y in range(4)])
         for bx in range(4)]
-       for by in range(4)])
+       for by in range(4)]

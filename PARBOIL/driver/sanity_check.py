@@ -27,7 +27,6 @@ import pdb
 import time
 import subprocess
 import socket
-from functools import reduce
 
 err_string = {
   0: 'success',
@@ -74,12 +73,12 @@ class benchmark:
       self.data.append(datum) 
 
   def run(self, ver, datum, pl, fake=False): 
-    cmd = 'python3 parboil run %s %s %s %s' % (self.name, ver, datum, pl)
-    print(cmd)
+    cmd = 'python parboil run %s %s %s %s' % (self.name, ver, datum, pl)
+    print cmd
 
     if fake: return 0, ''
 
-    p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, text=True)
+    p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
 
     timing = ''
     while True:
@@ -91,11 +90,11 @@ class benchmark:
       for cat in self.pbTimerCats:
         if line.find(cat) != -1:
           line = " ++ %s" % line
-          print(line, end='')
+          print line,
           timing += line
           isCat = True
           break
-      if not isCat: print(line, end='')
+      if not isCat: print line,
 
     sts = os.waitpid(p.pid, 0)[1]
     # return p.returncode, timing
@@ -140,7 +139,7 @@ class benchmark:
 
   def write_result(self, out):
     x = self.get_result_string()
-    print(x, end='')
+    print x,
     out.write(x)
     out.flush()
 
@@ -237,3 +236,4 @@ if socket.gethostname().startswith('cyclone'):
   run('nvidia')
 elif socket.gethostname().startswith('ati'):
   run('ati')
+

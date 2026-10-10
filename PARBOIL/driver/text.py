@@ -1,5 +1,6 @@
 #! /usr/bin/env python
 
+from itertools import imap
 import re
 
 TOKEN = re.compile(r"(?:^|(?<=\s))[^\s]+|(?:^|(?<!\s))[\s]+")
@@ -14,12 +15,12 @@ class iscan:
         self.current = init
         self.begin = True
 
-    def __next__(self):
+    def next(self):
         if self.begin:
             self.begin = False
             return self.current
         else:
-            cur = self.f(self.current, next(self.s)) # raises StopIteration
+            cur = self.f(self.current, self.s.next()) # raises StopIteration
             self.current = cur
             return cur
 
@@ -57,7 +58,7 @@ def format_columns(text, indent=0):
             # length; however, must take at least one token
             n = 0
             lengths = iscan(lambda n, t: n + len(t), inl_indent, tokens)
-            next(lengths)
+            lengths.next()
             for c in lengths:
                 if c > COLUMNS: break
                 n += 1
