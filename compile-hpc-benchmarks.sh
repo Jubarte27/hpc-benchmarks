@@ -175,6 +175,7 @@ clean() {
 
     clean_submodules
     (cd "$BENCHMARKS_DIR/PARBOIL" && "$(find_python2)" ./parboil clean spmv omp_base)
+    find "$BENCHMARKS_DIR/PARBOIL" -name "*.pyc" -delete
 }
 
 clean_submodules() {
