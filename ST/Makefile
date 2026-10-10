@@ -6,4 +6,4 @@ stream:
 	$(CC) stream.c -o stream $(FLAGS)
 
 clean:
-	rm stream
+	rm -f stream

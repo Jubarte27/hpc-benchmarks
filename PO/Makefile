@@ -6,4 +6,4 @@ omp_po:
 	$(CC) omp_po.c -o omp_po $(FLAGS)
 
 clean:
-	rm omp_po
+	rm -f omp_po

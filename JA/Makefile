@@ -6,4 +6,4 @@ omp_ja:
 	$(CC) omp_ja.c -o omp_ja $(FLAGS)
 
 clean:
-	rm omp_ja
+	rm -f omp_ja

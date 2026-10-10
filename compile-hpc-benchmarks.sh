@@ -3,10 +3,10 @@ set -e
 
 main() {
     set_log_depth 0
-    cd "$BENCHMARKS_DIR" || exit 1
+    cd "$BENCHMARKS_DIR"
 
     if [ "$JUSTCLEAN" == "true" ]; then
-        clean || exit 1
+        clean
         return
     fi
 
@@ -154,10 +154,8 @@ clean() {
 
     silent_make NAS clean
 
-    if [ -d "$BENCHMARKS_DIR/PARBOIL" ]; then
-        (cd "$BENCHMARKS_DIR/PARBOIL" && ./parboil clean stencil omp_base)
-    fi
     clean_submodules
+    (cd "$BENCHMARKS_DIR/PARBOIL" && ./parboil clean stencil omp_base)
 }
 
 clean_submodules() {
