@@ -79,7 +79,26 @@ compile_parboil() {
     if [ ! -f "$BENCHMARKS_DIR/PARBOIL/common/Makefile.conf" ]; then
         touch "$BENCHMARKS_DIR/PARBOIL/common/Makefile.conf" # fill me on day
     fi
-    (cd "$BENCHMARKS_DIR/PARBOIL" && ./parboil compile spmv omp_base)
+    local PYTHON2
+    PYTHON2="$(find_python2)"
+    (cd "$BENCHMARKS_DIR/PARBOIL" && "$PYTHON2" ./parboil compile spmv omp_base)
+}
+
+find_python2() {
+    local candidate
+    for candidate in \
+        "$PROJECT_DIR/.deps/bin/python2" \
+        "$PROJECT_DIR/.deps/python2/bin/python2" \
+        "$PROJECT_DIR/.deps/python2/bin/python" \
+        "$(command -v python2 2>/dev/null || true)" \
+        "/usr/bin/python2"; do
+        if [ -n "$candidate" ] && [ -x "$candidate" ] && "$candidate" --version 2>&1 | grep -q "Python 2"; then
+            echo "$candidate"
+            return 0
+        fi
+    done
+    echo "ERROR: python2 not found. Run ./initialize.sh to install it into .deps" >&2
+    return 1
 }
 
 compile_mw() {
@@ -155,7 +174,7 @@ clean() {
     silent_make NAS clean
 
     clean_submodules
-    (cd "$BENCHMARKS_DIR/PARBOIL" && ./parboil clean stencil omp_base)
+    (cd "$BENCHMARKS_DIR/PARBOIL" && "$(find_python2)" ./parboil clean spmv omp_base)
 }
 
 clean_submodules() {
@@ -221,6 +240,9 @@ set_env() {
 
     if [ -d "$PROJECT_DIR/.deps/bin" ]; then
         export PATH="$PROJECT_DIR/.deps/bin:$PATH"
+    fi
+    if [ -d "$PROJECT_DIR/.deps/python2/bin" ]; then
+        export PATH="$PROJECT_DIR/.deps/python2/bin:$PATH"
     fi
     if [ -d "$PROJECT_DIR/.deps/lib" ]; then
         export LD_LIBRARY_PATH="$PROJECT_DIR/.deps/lib:${LD_LIBRARY_PATH:-}"

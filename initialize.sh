@@ -6,6 +6,7 @@ main() {
     set_log_depth 0
     ensure update_submodules
     ensure setup_deps
+    ensure setup_python2
     ensure install_pnetcdf
     ensure ensure_uv
     ensure setup_venv
@@ -23,26 +24,46 @@ update_submodules() {
 
 setup_deps() {
     enter_new_func "Setting up self-contained userspace dependencies (.deps)"
-    local DEPS_DIR="$PROJECT_DIR/.deps"
-    local TOOLS_DIR="$PROJECT_DIR/.tools"
     mkdir -p "$TOOLS_DIR/bin"
 
     # Check if micromamba is already present
-    if [ ! -f "$TOOLS_DIR/bin/micromamba" ]; then
+    if [ ! -f "$MICROMAMBA" ]; then
         log_info "Downloading standalone micromamba..."
         local MAMBA_URL="https://micro.mamba.pm/api/micromamba/linux-64/latest"
         curl -Ls "$MAMBA_URL" | tar -xj -C "$TOOLS_DIR" bin/micromamba
-        chmod +x "$TOOLS_DIR/bin/micromamba"
+        chmod +x "$MICROMAMBA"
     fi
 
     # Check if essential tools are already provisioned in .deps
     if [ ! -f "$DEPS_DIR/bin/mpicxx" ] || [ ! -f "$DEPS_DIR/bin/gfortran" ] || [ ! -f "$DEPS_DIR/bin/cmake" ]; then
         log_info "Installing toolchain (gfortran, gcc, g++, openmpi, cmake, make, m4) into .deps..."
-        "$TOOLS_DIR/bin/micromamba" create -y -p "$DEPS_DIR" -c conda-forge \
+        "$MICROMAMBA" create -y -p "$DEPS_DIR" -c conda-forge \
             gfortran gcc gxx openmpi cmake make m4
     else
         log_info "Dependencies already present in $DEPS_DIR"
     fi
+}
+
+setup_python2() {
+    enter_new_func "Setting up Python 2.7 in .deps (for PARBOIL)"
+    local PY2_PREFIX="$DEPS_DIR/python2"
+
+    if [ -x "$PY2_PREFIX/bin/python" ] && "$PY2_PREFIX/bin/python" --version 2>&1 | grep -q "Python 2"; then
+        log_info "Python 2 already present at $PY2_PREFIX"
+    else
+        log_info "Installing Python 2.7 via micromamba into $PY2_PREFIX..."
+        "$MICROMAMBA" create -y -p "$PY2_PREFIX" -c conda-forge "python=2.7"
+    fi
+
+    # Expose python2 on the main .deps/bin PATH used by the build scripts.
+    # Do NOT link plain `python` here so the Python 3 .venv keeps precedence.
+    mkdir -p "$DEPS_DIR/bin"
+    for bin in python2 python2.7; do
+        if [ -x "$PY2_PREFIX/bin/$bin" ]; then
+            ln -sf "$PY2_PREFIX/bin/$bin" "$DEPS_DIR/bin/$bin"
+        fi
+    done
+    log_info "Python 2 available at $PY2_PREFIX/bin/python ($(readlink -f "$DEPS_DIR/bin/python2"))"
 }
 
 #there may be a better way to do this
@@ -52,7 +73,6 @@ find_system_library() {
     local env_vars=;
     local pkg_names; 
     local config_tool="${5:-}"
-    local DEPS_DIR="$PROJECT_DIR/.deps"
     read -r -a header_names <<< "$1"
     read -r -a env_vars <<< "$3"
     read -r -a pkg_names <<< "$4"
@@ -169,7 +189,6 @@ install_from_system() {
     local headers;
     local pkg_pc="${6:-}"
     local cmake_name="${7:-}"
-    local DEPS_DIR="$PROJECT_DIR/.deps"
     read -r -a headers <<< "$5"
 
     log_info "Found system $lib_name (include: $inc_dir, lib: $lib_dir). Using system $lib_name."
@@ -217,8 +236,6 @@ install_from_mamba() {
     local pkg_name="$1"
     local check_header="$2"
     local check_lib_pattern="$3"
-    local DEPS_DIR="$PROJECT_DIR/.deps"
-    local TOOLS_DIR="$PROJECT_DIR/.tools"
 
     # If the check header is a symlink pointing outside .deps, remove it so mamba installs cleanly
     if [ -L "$DEPS_DIR/include/$check_header" ]; then
@@ -239,7 +256,7 @@ install_from_mamba() {
     if compgen -G "$DEPS_DIR/conda-meta/${pkg_name}-*.json" >/dev/null; then
         force_flag=("--force-reinstall")
     fi
-    "$TOOLS_DIR/bin/micromamba" install "${force_flag[@]}" -y -p "$DEPS_DIR" -c conda-forge "$pkg_name"
+    "$MICROMAMBA" install "${force_flag[@]}" -y -p "$DEPS_DIR" -c conda-forge "$pkg_name"
     log_info "$pkg_name installed successfully via micromamba"
 }
 
@@ -307,6 +324,10 @@ _setConfigArgs() {
         esac
         shift
     done
+
+    DEPS_DIR="$PROJECT_DIR/.deps"
+    TOOLS_DIR="$PROJECT_DIR/.tools"
+    MICROMAMBA="$TOOLS_DIR/bin/micromamba"
 }
 
 _setConfigArgs "$@"
